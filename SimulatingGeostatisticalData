@@ -1,0 +1,722 @@
+
+########################################################################################
+##                                                                                    ##
+##    Simulating geostatistical data from Gaussian distribution of three classes (K=3)  ##
+##                                                                                    ##
+########################################################################################
+
+
+#####  required packages:
+
+library("stats")    ## for function "rmultinom"
+library("Matrix")   ## for function "bdiag"
+library("MASS")     ## for function "mvrnorm"
+
+
+##--------------------    Define the Matern covariance function  ---------------------##
+
+cov.matern=function(h, lambda, theta0, vars)
+{
+  if(lambda==0.5)
+       return(vars*exp(-h/theta0))
+  ismatrix = is.matrix(h)
+  if(ismatrix){nr=nrow(h); nl=ncol(h)}
+  h = c(h/theta0)
+  output = rep(1,length(h))
+  n = sum(h>0)
+      if(n>0)
+   {
+    h1 = h[h>0]
+    output[h>0] = (1/((2^(lambda-1)) * gamma(lambda))) * (h1^lambda)* besselK(h1,lambda)
+   }
+      if(ismatrix)
+      {
+        output = matrix(output, nr, nl)
+      }
+  vars*output
+}
+
+
+
+##------------------------    Simulate spatial locations     -------------------------##
+
+#### a regular grid: b2 * b2 
+
+b1 = 20
+b2 = (b1 + 1)
+
+Loc = cbind(rep(0:b1,b2),rep(b1:0,each=b2))   ###  [0,20]*[0,20]
+
+
+
+##------------------------    Generate size of classes    ---------------------------##
+
+n=b2^2    ## n = 441
+
+size1 = rmultinom(1, size = n, prob = c(1/3, 1/3, 1/3))
+size2 = as.vector(size1)
+
+n1 = size2[1]
+n2 = size2[2]
+n3 = size2[3]
+
+### n = n1+n2+n3
+
+
+
+
+##************************************************************************************##
+##                                                                                    ##
+##  Method 1: Fixed locations for classes, different means, bloked Covariance matrix  ##
+##                                                                                    ##
+##************************************************************************************##
+
+
+##--------------------   Compute spatial lags in fixed classes   ---------------------##
+ 
+dh1 = as.matrix(dist(Loc[1:n1,]))
+dh2 = as.matrix(dist(Loc[(n1+1):(n1+n2),]))
+dh3 = as.matrix(dist(Loc[(n1+n2+1):n,]))
+
+
+
+##-----------------  Construct blocked form variance-covariance matrix  --------------##
+#library(Matrix)
+## Constructing block matrix:
+
+Sigma1 = cov.matern(dh1, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+Sigma2 = cov.matern(dh2, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+Sigma3 = cov.matern(dh3, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+
+Sigma11 = bdiag(Sigma1, Sigma2, Sigma3)
+
+
+
+
+##--------------------------------      Mean vector     ------------------------------##
+
+mu1 = c(rep(-2,n1),rep(0, n2), rep(2,n3))      
+
+
+
+##----------------   Generate from multivariate  Gaussian distribution   -------------## 
+#library("MASS") 
+G1 = mvrnorm(mu=mu1, Sigma=Sigma11)
+z1 = matrix(G1, ncol=b2)
+
+
+
+##-----------------------------       Contour Plot         ---------------------------##
+
+filled.contour(x=(0:20),y=(0:20), z=z1, xlab="x-coordinate", ylab="y-coordinate", 
+           color.palette = function(n) hcl.colors(n, palette = "YlGnBu", rev = TRUE)
+#          color.palette=gray.colors
+#             , main = "spatial data from three class of Gaussian 
+#                 with different means and blocked Covariance"
+                )
+
+
+
+##### colors: 
+## palette = "purples","terrain","viridis","YlGnBu","Dark 3","Green-Brown","Blue-Red 3"
+
+
+
+##-----------------------------      Perspective plot      ---------------------------##
+par(mai=c(0,0.35,0,0))
+
+
+persp(x=(0:20),y=(0:20), z=z1, theta=65, phi=25, r=6, expand=0.6, 
+         col = "skyblue", 
+         axes=T, ticktype="detailed", 
+         xlab="x-coordinate", ylab="y-coordinate", zlab="value" 
+#             , main = "spatial data from three class of Gaussian 
+#                 with different means and blocked Covariance"
+ )
+
+
+##### colors:  col = "lightgray", "skyblue", "blue", "lightblue", "green1",
+
+
+
+
+
+
+##************************************************************************************##
+##                                                                                    ##
+## Method 2:Fixed locations for classes, different means, non-bloked Covariance matrix## 
+##                                                                                    ##
+##************************************************************************************##
+
+
+##-------   Compute spatial lags and Non-blocked variance-covariance matrix  ---------##
+
+dh = as.matrix(dist(Loc))
+Sigma22 = cov.matern(dh, lambda=2, theta=1/(7*sqrt(3)), vars=1) 
+
+
+##--------------------------------      Mean vector     ------------------------------##
+
+mu2 = c(rep(-2,n1),rep(0, n2), rep(2,n3))      
+
+
+
+##----------------   Generate from multivariate  Gaussian distribution   -------------## 
+
+G2 = mvrnorm(mu=mu2, Sigma=Sigma22)
+z2 = matrix(G2, ncol=b2)
+
+ 
+##--------------------------------     Contour Plot    -------------------------------##
+
+filled.contour(x=(0:20),y=(0:20), z=z2, xlab="x-coordinate", ylab="y-coordinate", 
+             color.palette = function(n) hcl.colors(n, palette = "YlGnBu", rev = TRUE)) 
+
+
+ 
+##----------------------------------   Perspective plot    ---------------------------##
+###par(mai=c(0,0.35,0,0))
+
+
+persp(x=(0:20),y=(0:20), z=z2, theta=65, phi=25, r=6, expand=0.6, col = "skyblue", 
+    axes=T, ticktype="detailed", xlab="x-coordinate", ylab="y-coordinate", zlab="value")
+
+
+
+
+
+
+##************************************************************************************##
+##                                                                                    ##
+##  Method 3: Random locations for classes, different means, bloked Covariance matrix ##
+##                                                                                    ##
+##************************************************************************************##
+
+
+###-----------------------------   Selecting random classes  -------------------------##
+
+LL = 1:n
+
+L1 = sort(sample(LL, size=n1, replace = FALSE))
+L2 = sort(sample(LL[-L1], size=n2, replace = FALSE))
+L3 = sort(sample(LL[-c(L1,L2)], size=n3, replace = FALSE))
+
+
+##--------------------   Compute spatial lags in random classes  ---------------------##
+
+dh1 = as.matrix(dist(Loc[L1,]))
+dh2 = as.matrix(dist(Loc[L2,]))
+dh3 = as.matrix(dist(Loc[L3,]))
+
+
+##----------------   Construct Bloked form of variance-covariance matrix  ------------##
+
+Sigma1 = cov.matern(dh1, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+Sigma2 = cov.matern(dh2, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+Sigma3 = cov.matern(dh3, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+
+Sigma33 = bdiag(Sigma1, Sigma2, Sigma3)
+
+
+##-------------------   Mean vector corresponding random classes    ------------------##
+
+A = rep(0,n)
+A[L1] = -2
+A[L2] = 0
+A[L3] = 2
+
+mu3 = A
+
+
+##----------------   Generate from multivariate  Gaussian distribution   -------------## 
+
+G3 = mvrnorm(mu=mu3, Sigma=Sigma33)
+z3 = matrix(G3, ncol=b2)
+
+
+##--------------------------------     Contour Plot    -------------------------------##
+
+filled.contour(x=(0:20), y=(0:20), z=z3, xlab="x-coordinate", ylab="y-coordinate", 
+              color.palette = function(n) hcl.colors(n, palette = "YlGnBu", rev = TRUE))
+
+
+
+
+##------------------------------    Perspective plot   -------------------------------##
+###par(mai=c(0,0.35,0,0))
+
+
+persp(x=(0:20),y=(0:20), z=z3, theta=65, phi=25, r=6, expand=0.6, col = "skyblue",
+    axes=T, ticktype="detailed", xlab="x-coordinate", ylab="y-coordinate", zlab="value")
+
+
+
+
+
+
+##************************************************************************************##
+##                                                                                    ##
+##   Method 4: Random locations for classes, different means, non-bloked Covariance   ##
+##                                                                                    ##
+##************************************************************************************##
+
+
+###-----------------------------   Selecting random classes  -------------------------##
+
+LL = 1:n
+
+L1 = sort(sample(LL, size=n1, replace = FALSE))
+L2 = sort(sample(LL[-L1], size=n2, replace = FALSE))
+L3 = sort(sample(LL[-c(L1,L2)], size=n3, replace = FALSE))
+
+
+##----------------   Compute spatial lags and Covariance matrix  ---------------------##
+
+dh = as.matrix(dist(Loc))
+Sigma44 = cov.matern(dh, lambda=2, theta=1/(7*sqrt(3)), vars=1) 
+
+
+
+##-------------------   Mean vector corresponding random classes    ------------------##
+
+A = rep(0,n)
+A[L1] = -2
+A[L2] = 0
+A[L3] = 2
+
+mu4 = A
+
+
+##----------------   Generate from multivariate  Gaussian distribution   -------------## 
+
+G4 = mvrnorm(mu=mu4, Sigma=Sigma44)
+z4 = matrix(G4, ncol=b2)
+
+
+##-----------------------------  Contour Plot    ---------------------------##
+
+filled.contour(x=(0:20), y=(0:20), z=z4, xlab="x-coordinate", ylab="y-coordinate", 
+            color.palette = function(n) hcl.colors(n, palette = "YlGnBu", rev = TRUE))
+ 
+ 
+         
+
+##---------------------------  Perspective plot  ---------------------------##
+###par(mai=c(0,0.35,0,0))
+
+persp(x=(0:20),y=(0:20), z=z4, theta=65, phi=25, r=6, expand=0.6, col = "skyblue",
+     axes=T, ticktype="detailed", xlab="x-coordinate", ylab="y-coordinate", zlab="value")
+
+
+
+
+
+
+
+
+
+########################################################################################
+##                                                                                    ##
+## Simulate geostatistical data from Sub-Gaussian distribution of three classes (K=3) ##
+##                                                                                    ##
+########################################################################################
+
+#####  required packages:
+
+library("stats")    ## for function "rmultinom"
+library("Matrix")   ## for function "bdiag"
+library("MASS")     ## for function "mvrnorm"
+library("stable")   ## for function "rstable"
+
+
+##------------------------    Simulate spatial locations     -------------------------##
+
+#### a regular grid: b2 * b2 
+
+b1 = 20
+b2 = (b1 + 1)
+
+Loc = cbind(rep(0:b1,b2), rep(b1:0,each=b2))   ###  [0,20]*[0,20]
+
+
+
+##------------------------    Generate size of classes     ---------------------------##
+
+n = b2^2    ## n = 441
+
+size1 = rmultinom(1, size = n, prob = c(1/3, 1/3, 1/3))
+size2 = as.vector(size1)
+
+n1 = size2[1]
+n2 = size2[2]
+n3 = size2[3]
+
+### n = n1+n2+n3
+
+
+
+
+##************************************************************************************##
+##                                                                                    ##
+## Method 1: Fixed locations for classes, different shifts, bloked dispersion matrix  ##
+##                                                                                    ##
+##************************************************************************************##
+
+
+##--------------------   Compute spatial lags in fixed classes   ---------------------##
+ 
+dh1 = as.matrix(dist(Loc[1:n1,]))
+dh2 = as.matrix(dist(Loc[(n1+1):(n1+n2),]))
+dh3 = as.matrix(dist(Loc[(n1+n2+1):n,]))
+
+
+
+##--------------------     Construct blocked dispersion matrix      ------------------##
+#library(Matrix)
+## Constructing block matrix:
+
+Sigma1 = cov.matern(dh1, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+Sigma2 = cov.matern(dh2, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+Sigma3 = cov.matern(dh3, lambda=2, theta=1/(7*sqrt(3)), vars=1)
+
+Sigma11 = bdiag(Sigma1, Sigma2, Sigma3)
+
+
+
+##--------------------------------      Mean vector     ------------------------------##
+
+mu0 = c(rep(0, b2^{2}))     
+
+
+
+##----------------    Generate from multivariate Gaussian distribution   -------------## 
+#library("MASS")
+#set.seed(13)
+ 
+G1 = mvrnorm(mu=mu0, Sigma=Sigma11)
+
+
+
+##-----------------    Generate from univariate Stable distribution   ----------------##
+#library("stable")
+
+alpha = 0.75
+x = rstable(1,0, cos(pi*alpha/4)^(2/alpha), 1, alpha/2, eps = 1e-06) 
+x
+
+##[1] 40.54322
+
+
+##--------------------------------     Shift vector     ------------------------------##
+
+delta1 = runif(1,-2,x)
+delta2 = runif(1,delta1,x)
+delta3 = runif(1,delta2,(x+2))
+
+##delta1
+##[1] 22.44627
+#
+##delta2
+##[1] 28.84017
+#
+##delta3
+##[1] 33.49023
+
+
+delt = c(rep(delta1, n1),rep(delta2,n2),rep(delta3, n3))  
+#set.seed(23)
+
+
+
+
+##----------------    create a Sub-Gaussian alpha stable random vector   -------------##
+
+Y1 = delt + sqrt(x) * G1 
+y1 = matrix(Y1, ncol=b2)
+
+
+
+##------------------------------      Contour Plot       -----------------------------##
+
+filled.contour(x=(0:20),y=(0:20), z=y1, xlab="x-coordinate", ylab="y-coordinate", 
+             color.palette = function(n) hcl.colors(n, palette = "YlGnBu", rev = TRUE)
+#            color.palette=gray.colors
+#             , main = "spatial data from three class of Sub-Gaussian 
+#                 with different shifts and blocked dispersion"
+ )
+
+
+##### colors: 
+## palette = "purples","terrain","viridis","YlGnBu","Dark 3","Green-Brown","Blue-Red 3"
+
+
+
+##-----------------------------      Perspective plot      ---------------------------##
+
+###par(mai=c(0,0.35,0,0))
+
+persp(x=(0:20),y=(0:20), z=y1, theta=65, phi=25, r=6, expand=0.6, col = "skyblue",
+    axes=T, ticktype="detailed", xlab="x-coordinate", ylab="y-coordinate", zlab="value" 
+#             , main = "spatial data from three class of Sub-Gaussian 
+#                 with different shifts and blocked dispersion"
+                )
+
+
+
+##### colors:  col = "lightgray", "skyblue", "blue", "lightblue", "green1",
+
+
+
+
+
+
+##************************************************************************************##
+##                                                                                    ##
+## Method 2:Fixed locations for classes,different shifts,non-bloked dispersion matrix ##
+##                                                                                    ##
+##************************************************************************************##
+
+
+##------------------     Compute spatial lags and dispersion matrix   ----------------##
+
+
+dh = as.matrix(dist(Loc))
+Sigma22 = cov.matern(dh, lambda=1/2, theta=1/(sqrt(3)), vars=2) ## Covariance matrix
+
+
+##--------------------------------      Mean vector     ------------------------------##
+
+mu0 = c(rep(0, b2^{2}))     
+
+
+
+##----------------    Generate from multivariate Gaussian distribution   -------------## 
+
+G2 = mvrnorm(mu = mu0, Sigma = Sigma22)
+
+
+##-----------------    Generate from univariate Stable distribution   ----------------##
+
+alpha = 0.75
+x = rstable(1,0, cos(pi*alpha/4)^(2/alpha), 1, alpha/2, eps = 1e-06) 
+x
+
+
+##--------------------------------     Shift vector     ------------------------------##
+
+delta1 = runif(1,-2,x)
+delta2 = runif(1,delta1,x)
+delta3 = runif(1,delta2,(x+2))
+
+
+delt = c(rep(delta1, n1),rep(delta2,n2),rep(delta3, n3))  
+
+
+
+
+##----------------    create a Sub-Gaussian alpha stable random vector   -------------##
+
+Y2 = delt + sqrt(x)* G2 
+y2 = matrix(Y2, ncol=b2)
+
+
+
+
+
+##-------------------------------      Contour Plot      -----------------------------##
+###par(mai=c(0.5,0.5,0.2,0.3))
+
+filled.contour(x=(0:20),y=(0:20), z=y2, xlab="x-coordinate", ylab="y-coordinate", 
+            color.palette = function(n) hcl.colors(n, palette = "YlGnBu", rev = TRUE))
+
+
+##-------------------------------     Perspective plot     ---------------------------##
+
+persp(x=(0:20), y=(0:20), z=y2, theta=65, phi=25, r=6, expand=0.6, col = "skyblue", 
+    axes=T, ticktype="detailed", xlab="x-coordinate", ylab="y-coordinate", zlab="value")
+
+
+
+
+
+
+
+##************************************************************************************##
+##                                                                                    ##
+## Method 3: Random locations for classes, different shifts, bloked dispersion matrix ##
+##                                                                                    ##
+##************************************************************************************##
+
+
+
+###-----------------------------     Selecting random classes     --------------------##
+
+LL = 1:n
+
+L1 = sort(sample(LL, size=n1, replace = FALSE))
+L2 = sort(sample(LL[-L1], size=n2, replace = FALSE))
+L3 = sort(sample(LL[-c(L1,L2)], size=n3, replace = FALSE))
+
+
+
+##--------------------   Compute spatial lags in random classes  ---------------------##
+ 
+
+dh1 = as.matrix(dist(Loc[L1,]))
+dh2 = as.matrix(dist(Loc[L2,]))
+dh3 = as.matrix(dist(Loc[L3,]))
+
+
+
+##---------------------   Construct blocked form dispersion matrix   -----------------##
+
+Sigma1 = cov.matern(dh1, lambda=1/2, theta=1/(7*sqrt(3)), vars=2)
+Sigma2 = cov.matern(dh2, lambda=1/2, theta=1/(7*sqrt(3)), vars=2)
+Sigma3 = cov.matern(dh3, lambda=1/2, theta=1/(7*sqrt(3)), vars=2)
+
+Sigma33 = bdiag(Sigma1, Sigma2, Sigma3)
+
+
+
+##--------------------------------      Mean vector     ------------------------------##
+
+mu0 = c(rep(0, b2^{2}))     
+
+
+##----------------    Generate from multivariate Gaussian distribution   -------------## 
+#set.seed(12)
+G3 = mvrnorm(mu = mu0, Sigma = Sigma33)
+
+
+##-----------------    Generate from univariate Stable distribution   ----------------##
+
+alpha = 0.75
+x = rstable(1,0, cos(pi*alpha/4)^(2/alpha), 1, alpha/2, eps = 1e-06) 
+x
+
+
+##--------------------     Shift vector corresponding random classes    --------------##
+
+delta1 = runif(1,-2,x)
+delta2 = runif(1,delta1,x)
+delta3 = runif(1,delta2,(x+2)) 
+
+A = rep(0,n)
+A[L1] = delta1
+A[L2] = delta2
+A[L3] = delta3
+ 
+delt = A
+
+
+
+##----------------    create a Sub-Gaussian alpha stable random vector   -------------##
+
+Y3 = delt + sqrt(x) * G3 
+y3 = matrix(Y3, ncol=b2)
+
+
+
+##-----------------------------      Contour Plot       ------------------------------##
+
+filled.contour(x=(0:20),y=(0:20), z=y3, xlab="x-coordinate", ylab="y-coordinate", 
+              color.palette = function(n) hcl.colors(n, palette = "YlGnBu", rev = TRUE))
+
+
+##---------------------------  Perspective plot  ---------------------------##
+###par(mai=c(0,0.35,0,0))
+
+
+persp(x=(0:20),y=(0:20), z=y3, theta=65, phi=25, r=6, expand=0.6, col = "skyblue", 
+    axes=T, ticktype="detailed", xlab="x-coordinate", ylab="y-coordinate", zlab="value")
+
+
+
+
+
+
+##************************************************************************************##
+##                                                                                    ##
+# Method 4: Random locations for classes,different shifts,non-bloked dispersion matrix #
+##                                                                                    ##
+##************************************************************************************##
+
+
+###---------------------------   Selecting random classes      -----------------------##
+
+LL = 1:n
+
+L1 = sort(sample(LL, size=n1, replace = FALSE))
+L2 = sort(sample(LL[-L1], size=n2, replace = FALSE))
+L3 = sort(sample(LL[-c(L1,L2)], size=n3, replace = FALSE))
+
+
+
+##-----------------   Compute spatial lags and dispersion matrix    ------------------##
+ 
+dh = as.matrix(dist(Loc))
+Sigma44 = cov.matern(dh, lambda=1/2, theta=1/(sqrt(3)), vars=2) 
+
+
+
+##--------------------------------      Mean vector     ------------------------------##
+
+mu0 = c(rep(0, b2^{2}))     
+
+
+
+##----------------    Generate from multivariate Gaussian distribution   -------------## 
+
+G4 = mvrnorm(mu = mu0, Sigma = Sigma44)
+
+
+
+
+##-----------------    Generate from univariate Stable distribution   ----------------##
+
+alpha = 0.75
+x = rstable(1,0, cos(pi*alpha/4)^(2/alpha), 1, alpha/2, eps = 1e-06) 
+x
+
+
+
+##--------------------     Shift vector corresponding random classes    --------------##
+
+delta1 = runif(1,-2,x)
+delta2 = runif(1,delta1,x)
+delta3 = runif(1,delta2,(x+2)) 
+
+A = rep(0,n)
+A[L1] = delta1
+A[L2] = delta2
+A[L3] = delta3
+
+delt = A
+
+
+
+##----------------    create a Sub-Gaussian alpha stable random vector   -------------##
+
+Y4 = delt + sqrt(x) * G4 
+y4 = matrix(Y4, ncol=b2)
+
+
+
+
+##----------------------------------     Contour Plot    -----------------------------##
+
+filled.contour(x=(0:20),y=(0:20), z=y4, xlab="x-coordinate", ylab="y-coordinate", 
+            color.palette = function(n) hcl.colors(n, palette = "YlGnBu", rev = TRUE))
+
+
+
+##---------------------------------    Perspective plot    ---------------------------##
+### par(mai=c(0,0.35,0,0))
+
+
+persp(x=(0:20),y=(0:20), z=y4, theta=65, phi=25, r=6, expand=0.6, col = "skyblue", 
+    axes=T, ticktype="detailed", xlab="x-coordinate", ylab="y-coordinate", zlab="value")
+
+
+
+
